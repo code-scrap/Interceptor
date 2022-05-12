@@ -163,7 +163,7 @@ function Send-ServerHttpRequest([string] $URI, [string] $httpMethod,[byte[]] $re
 		            if($proxy -eq $null) { $request.Proxy = [System.Net.GlobalProxySelection]::GetEmptyWebProxy() }
 		            else { $request.Proxy = $proxy }
 		            $request.Method = $httpMethod
-		            $request.AllowAutoRedirect = $false 
+		            $request.AllowAutoRedirect = $true 
 		            $request.AutomaticDecompression = [System.Net.DecompressionMethods]::None
 	
 		            For ($i = 1; $i -le $requestString.Length; $i++)
@@ -185,20 +185,19 @@ function Send-ServerHttpRequest([string] $URI, [string] $httpMethod,[byte[]] $re
 					            "Range" { $request.Range = $line[1] }
 					            "Referer" { $request.Referer = $line[1] }
 					            "User-Agent" { $request.UserAgent = $line[1] } #You can Add Custom User_agent
-					            # Added Tampering Here...User-Agent Example
+					            
 					            "Transfer-Encoding"  { $request.TransferEncoding = $line[1] } 
-					            default {
-								            if($line[0] -eq "Accept-Encoding")
+					                        default {if($line[0] -eq "Accept-Encoding")
 								            {	
 									            $request.Headers.Add( $line[0], " ") #Take that Gzip...
-									            #Otherwise have to decompress response to tamper with content...
-								            }
-								            else
-								            {
-									            $request.Headers.Add( $line[0], $line[1])
-								            }	
+									                #Otherwise have to decompress response to tamper with content...
+								                }
+								                else
+								                {
+									                $request.Headers.Add( $line[0], $line[1])
+								                }	
 	
-							            }
+							                }
 				            }
 				
 			            }
@@ -287,7 +286,7 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
                             $sslcertfake =  Invoke-CreateCertificate $domainParse[0] 
 			            }
 			            
-			            $sslStream.AuthenticateAsServer($sslcertfake, $false, [System.Security.Authentication.SslProtocols]::Tls12, $false)
+			            $sslStream.AuthenticateAsServer($sslcertfake, $false, [System.Security.Authentication.SslProtocols]::None, $false)
 		
 			            $sslbyteArray = new-object System.Byte[] 32768
 			            [void][byte[]] $sslbyteClientRequest
