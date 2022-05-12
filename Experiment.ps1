@@ -287,7 +287,7 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 			            }
 			            
 			            $sslStream.AuthenticateAsServer($sslcertfake, $false, [System.Security.Authentication.SslProtocols]::None, $false)
-		
+		                Write-Host $sslStream.SslProtocol -Fore White
 			            $sslbyteArray = new-object System.Byte[] 32768
 			            [void][byte[]] $sslbyteClientRequest
 			
