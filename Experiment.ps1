@@ -284,7 +284,8 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 
 		            #Now you have a byte[] Get a string...  Caution, not all that is sent is "string" Headers will be.
 		            $requestString = [System.Text.Encoding]::UTF8.GetString($byteClientRequest)
-                    Write-Host $requestString -ForegroundColor Yellow
+                    	    #Write-Host $requestString -ForegroundColor Yellow
+			    #Uncomment to see CONNECT Method and HEADERS
 
 		
 		            [string[]] $requestArray = ($requestString -split '[\r\n]') |? {$_} 
