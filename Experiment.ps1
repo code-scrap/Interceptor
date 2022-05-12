@@ -1,30 +1,3 @@
-function Start-CertificateAuthority()
-{
-	#Use This to Capture From a remote device, like tablet or mobile
-	#Pulls CA Certificate from Store and Writes Directly back to Mobile Device
-	# example: http://localhost:8082/i.cer
-	Start-Job -ScriptBlock {
-			
-			$Hso = New-Object Net.HttpListener
-			$Hso.Prefixes.Add("http://+:8082/")
-			$Hso.Start()
-			While ($Hso.IsListening) {
-				$HC = $Hso.GetContext()
-				$HRes = $HC.Response
-				$HRes.Headers.Add("Content-Type","text/plain")
-				$cert = Get-ChildItem cert:\CurrentUser\Root | where { $_.Issuer -like "CN=__Interceptor_Trusted_Root" }
-				$type = [System.Security.Cryptography.X509Certificates.X509ContentType]::cert
-				$Buf = $cert.Export($type)
-				$HRes.OutputStream.Write($Buf,0,$Buf.Length)
-				$HRes.Close()
-			}
-				
-			}
-	
-	
-	
-}
-
 function Invoke-RemoveCertificates([string] $issuedBy)
 {
 	$certs = Get-ChildItem cert:\CurrentUser\My | where { $_.Issuer -match $issuedBy }
@@ -76,10 +49,10 @@ function Invoke-CreateCACertificate([string] $certSubject)
      
 }
 
-function Invoke-CreateCertificate([string] $certSubject, $selfsignCA)
+function Invoke-CreateCertificate([string] $certSubject)
 {
-    
-    $cert = New-SelfSignedCertificate -certstorelocation cert:\CurrentUser\My -Subject $certSubject -DnsName $certSubject -Signer $selfsignCA[0] -Type Custom  -KeyAlgorithm ECDSA_nistP256 -CurveExport CurveName 
+    $selfsignCA = Get-ChildItem cert:\CurrentUser\My| Where-Object { $_.Subject -match "__Interceptor_Trusted_Root" }
+    $cert = New-SelfSignedCertificate -certstorelocation cert:\CurrentUser\My -Subject $certSubject -DnsName $certSubject -Signer $selfsignCA -Type Custom  -KeyAlgorithm ECDSA_nistP256 -CurveExport CurveName 
     return $cert
      
 }
@@ -125,11 +98,11 @@ function Receive-ServerHttpResponse ([System.Net.WebResponse] $response)
 		
 		            [byte[]] $rawHeaderBytes = [System.Text.Encoding]::Ascii.GetBytes($rstring)
 		
-		            Write-Host $rstring 
+		            Write-Host $rstring -Fore Green
 		
 		            [void][byte[]] $outdata 
 		            $tempMemStream = New-Object System.IO.MemoryStream
-		            [byte[]] $respbuffer = New-Object Byte[] 32768 # 32768
+		            [byte[]] $respbuffer = New-Object Byte[] 32768
 		
 		            if($transferEncoding)
 		            {
@@ -162,8 +135,7 @@ function Receive-ServerHttpResponse ([System.Net.WebResponse] $response)
 		
 		            $tempMemStream.Close()
 		            $response.Close()
-                    $rv_string = [System.Text.Encoding]::UTF8.GetString($rawHeaderBytes)
-		            Write-Host $rv_string -ForegroundColor Green #JustReturn Headers for now
+                    
 		            return $rv
 	            }
 	            Catch [System.Exception]
@@ -282,7 +254,7 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 
 		            #Now you have a byte[] Get a string...  Caution, not all that is sent is "string" Headers will be.
 		            $requestString = [System.Text.Encoding]::UTF8.GetString($byteClientRequest)
-                    #Write-Host $requestString -ForegroundColor Yellow
+                    
                     #Debug If You want to see CONNECT Methods.
 
 		
@@ -296,6 +268,8 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 
 		            if($methodParse[0] -ceq "CONNECT")
 		            {
+                        
+
 			            [string[]] $domainParse = $methodParse[1].Split(":")
 			            
 			            $connectSpoof = [System.Text.Encoding]::Ascii.GetBytes("HTTP/1.1 200 Connection Established`r`nTimeStamp: " + [System.DateTime]::Now.ToString() + "`r`n`r`n")
@@ -309,11 +283,11 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
                         
 			            if ($sslcertfake -eq $null)
 			            {
-				            $selfsignCA = Get-ChildItem cert:\CurrentUser\My| Where-Object { $_.Subject -match "__Interceptor_Trusted_Root" }
-                            $sslcertfake =  Invoke-CreateCertificate $domainParse[0] $selfsignCA
+				           
+                            $sslcertfake =  Invoke-CreateCertificate $domainParse[0] 
 			            }
 			            
-			            $sslStream.AuthenticateAsServer($sslcertfake, $false, [System.Security.Authentication.SslProtocols]::Tls13, $false)
+			            $sslStream.AuthenticateAsServer($sslcertfake, $false, [System.Security.Authentication.SslProtocols]::Tls12, $false)
 		
 			            $sslbyteArray = new-object System.Byte[] 32768
 			            [void][byte[]] $sslbyteClientRequest
@@ -326,12 +300,12 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 			
 			            $SSLRequest = [System.Text.Encoding]::UTF8.GetString($sslbyteClientRequest)
 			            
-                        
+                        Write-Host $SSLRequest -Fore Yellow
 			
 			            [string[]] $SSLrequestArray = ($SSLRequest -split '[\r\n]') |? {$_} 
 			            [string[]] $SSLmethodParse = $SSLrequestArray[0] -split " "
 			
-			            $secureURI = "https://" + $domainParse[0] + $SSLmethodParse[1]
+			            $secureURI = 'https://' + $domainParse[0] + $SSLmethodParse[1]
 			            
 
 			            [byte[]] $byteResponse =  Send-ServerHttpRequest $secureURI $SSLmethodParse[0] $sslbyteClientRequest $proxy
@@ -352,7 +326,7 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 		            }#End CONNECT/SSL Processing
 		            Else
 		            {
-                        Write-Host $requestString -Fore Cyan
+                        
 
 			            [byte[]] $proxiedResponse = Send-ServerHttpRequest $methodParse[1] $methodParse[0] $byteClientRequest $proxy
 			            if($proxiedResponse[0] -eq '0x00')
@@ -403,7 +377,9 @@ function Main()
 	$client = New-Object System.Net.Sockets.TcpClient
 	$client.NoDelay = $true
 	
-	
+	#$proxy = New-Object System.Net.WebProxy('127.0.0.1', '8889')
+	#[Console]::WriteLine('Using Proxy Server 127.0.0.1 : 8889')
+
 	while($true)
 	{
 		
@@ -420,3 +396,6 @@ function Main()
 }
 
 Main
+
+# Sample Test  
+# curl -k -tlsv1.3 -v -x localhost:8888 https://www.example.com
