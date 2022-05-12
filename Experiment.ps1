@@ -1,6 +1,6 @@
 function Start-CertificateAuthority()
 {
-	#Thanks to @obscuresec for this Web Host
+	#Use This to Capture From a remote device, like tablet or mobile
 	#Pulls CA Certificate from Store and Writes Directly back to Mobile Device
 	# example: http://localhost:8082/i.cer
 	Start-Job -ScriptBlock {
@@ -60,7 +60,6 @@ function Invoke-CreateCACertificate([string] $certSubject)
   
     $cert = New-SelfSignedCertificate -certstorelocation cert:\CurrentUser\My -DnsName $certSubject -Type Custom -KeyAlgorithm RSA  -KeyUsage CertSign,CRLSign
 
-
     #Copy Into Root Store
      
     $DestStoreScope = 'CurrentUser'
@@ -80,8 +79,7 @@ function Invoke-CreateCACertificate([string] $certSubject)
 function Invoke-CreateCertificate([string] $certSubject, $selfsignCA)
 {
     
-    $cert = New-SelfSignedCertificate -certstorelocation cert:\CurrentUser\My -Subject $certSubject -DnsName $certSubject -Signer $selfsignCA[0] -Type Custom 
-    
+    $cert = New-SelfSignedCertificate -certstorelocation cert:\CurrentUser\My -Subject $certSubject -DnsName $certSubject -Signer $selfsignCA[0] -Type Custom  -KeyAlgorithm ECDSA_nistP256 -CurveExport CurveName 
     return $cert
      
 }
@@ -284,8 +282,8 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 
 		            #Now you have a byte[] Get a string...  Caution, not all that is sent is "string" Headers will be.
 		            $requestString = [System.Text.Encoding]::UTF8.GetString($byteClientRequest)
-                    	    #Write-Host $requestString -ForegroundColor Yellow
-			    #Uncomment to see CONNECT Method and HEADERS
+                    #Write-Host $requestString -ForegroundColor Yellow
+                    #Debug If You want to see CONNECT Methods.
 
 		
 		            [string[]] $requestArray = ($requestString -split '[\r\n]') |? {$_} 
@@ -383,8 +381,8 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 
 function Main()
 {	
-	Invoke-RemoveCertificates "__Interceptor_Trusted_Root"
-    Invoke-CreateCACertificate "__Interceptor_Trusted_Root"
+	Invoke-RemoveCertificates "__Interceptor_Trusted_Root" # Call to Clean Up Previous Certificates Installed.
+    Invoke-CreateCACertificate "__Interceptor_Trusted_Root" # Install Your Local CA - These are hardcoded , You could easily replace
 	
 	if($ListenPort)
 	{
