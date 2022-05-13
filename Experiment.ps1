@@ -51,7 +51,8 @@ function Invoke-CreateCACertificate([string] $certSubject)
 
 function Invoke-CreateCertificate([string] $certSubject)
 {
-    $selfsignCA = Get-ChildItem cert:\CurrentUser\My| Where-Object { $_.Subject -match "__Interceptor_Trusted_Root" }
+    # Put the Cert in a global variable to reduce lookups.
+    #$selfsignCA = Get-ChildItem cert:\CurrentUser\My| Where-Object { $_.Subject -match "__Interceptor_Trusted_Root" }
     $cert = New-SelfSignedCertificate -certstorelocation cert:\CurrentUser\My -Subject $certSubject -DnsName $certSubject -Signer $selfsignCA -Type Custom  `
     -KeyAlgorithm ECDSA_nistP256 -CurveExport CurveName 
     return $cert
@@ -100,6 +101,7 @@ function Receive-ServerHttpResponse ([System.Net.WebResponse] $response)
 		[byte[]] $rawHeaderBytes = [System.Text.Encoding]::Ascii.GetBytes($rstring)
 		
 		Write-Host $rstring -Fore Green
+        $stream.Write($rstring + "`r`n")
 		
 		[void][byte[]] $outdata 
 		$tempMemStream = New-Object System.IO.MemoryStream
@@ -302,6 +304,7 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 			$SSLRequest = [System.Text.Encoding]::UTF8.GetString($sslbyteClientRequest)
 			            
             Write-Host $SSLRequest -Fore Yellow
+            $stream.Write($SSLRequest)
 			
 			[string[]] $SSLrequestArray = ($SSLRequest -split '[\r\n]') |? {$_} 
 			[string[]] $SSLmethodParse = $SSLrequestArray[0] -split " "
@@ -341,7 +344,7 @@ function Receive-ClientHttpRequest([System.Net.Sockets.TcpClient] $client, [Syst
 			
 		}#End Http Proxy
 		            
-		
+		$stream.FlushAsync() |Out-Null
 	}# End HTTPProcessing Block
 	Catch
 	{
@@ -358,6 +361,8 @@ function Main()
 {	
 	Invoke-RemoveCertificates "__Interceptor_Trusted_Root" # Call to Clean Up Previous Certificates Installed.
     Invoke-CreateCACertificate "__Interceptor_Trusted_Root" # Install Your Local CA - These are hardcoded , You could easily replace
+    $selfsignCA = Get-ChildItem cert:\CurrentUser\My| Where-Object { $_.Subject -match "__Interceptor_Trusted_Root" } 
+    #"Cache" selfsignCA to prevent all the lookups.
 	
 	if($ListenPort)
 	{
@@ -379,24 +384,42 @@ function Main()
 	$client.NoDelay = $true
 	
 	#$proxy = New-Object System.Net.WebProxy('127.0.0.1', '8889')
-	[Console]::WriteLine('Using Proxy Server 127.0.0.1 : 8889')
+	#[Console]::WriteLine('Using Proxy Server 127.0.0.1 : 8889')
+
+    $selfsignCA = Get-ChildItem cert:\CurrentUser\My| Where-Object { $_.Subject -match "__Interceptor_Trusted_Root" }
 
 	while($true)
 	{
+		 if ($listener.Pending()) {
+            $client = $listener.AcceptTcpClient()
+            Receive-ClientHttpRequest $client $proxy
+            continue;
+            }
+            start-sleep -Milliseconds 1000  
+            $stream.FlushAsync() | Out-Null
 		
-		$client = $listener.AcceptTcpClient()
-		
-		if($client -ne $null)
-		{
-			Receive-ClientHttpRequest $client $proxy
-		}
 		
 	}
 	
 
 }
 
-Main
+ 
+$path = 'Interceptor_Log_'+[DateTimeOffset]::Now.ToUnixTimeSeconds()+'_.txt'
+$stream = [System.IO.StreamWriter]::new($path)
+
+$stream.Write('Log File ' + [System.DateTime]::Now.ToString() + "`r`n")
+
+
+
+
+
 
 # Sample Test  
 # curl -k -tlsv1.3 -v -x localhost:8888 https://www.example.com
+
+
+Main
+
+$stream.close()
+Exit
